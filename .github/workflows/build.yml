@@ -85,21 +85,30 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Generate missing debug.keystore if needed
+      - name: Generate and place debug.keystore across expected paths
         run: |
-          KS_PATH=$(find . -maxdepth 3 -name "debug.keystore" | head -n 1)
-          if [ -z "$KS_PATH" ]; then
-            mkdir -p app/debug
-            keytool -genkeypair -v \
-              -keystore app/debug/debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          TMP_KS="/tmp/debug.keystore"
+          keytool -genkeypair -v \
+            -keystore "$TMP_KS" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          mkdir -p app/debug
+          cp -f "$TMP_KS" ./debug.keystore
+          cp -f "$TMP_KS" app/debug.keystore
+          cp -f "$TMP_KS" app/debug/debug.keystore
+
+          for gf in app/build.gradle app/build.gradle.kts; do
+            if [ -f "$gf" ]; then
+              sed -i 's/signingConfig signingConfigs\.debugConfig/signingConfig signingConfigs.debug/g' "$gf"
+              sed -i 's/signingConfig = signingConfigs\.getByName("debugConfig")/signingConfig = signingConfigs.getByName("debug")/g' "$gf"
+            fi
+          done
 
       - name: Grant execute permission for gradlew
         run: |
