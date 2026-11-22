@@ -15,14 +15,23 @@ jobs:
 
       - name: Unzip project archive
         run: |
+          rm -rf extracted_src
           mkdir -p extracted_src
           unzip -o ss-vpn-fixed.zip -d extracted_src
-          if [ -f "extracted_src/gradlew" ]; then
-            cp -r extracted_src/* .
-          else
-            SUBDIR=$(find extracted_src -maxdepth 2 -name "gradlew" -exec dirname {} \; | head -n 1)
-            cp -r "$SUBDIR"/* .
+
+          PROJ_DIR=$(find extracted_src -maxdepth 4 -name "gradlew" -exec dirname {} \; | head -n 1)
+          if [ -z "$PROJ_DIR" ]; then
+            PROJ_DIR=$(find extracted_src -maxdepth 4 \( -name "build.gradle" -o -name "build.gradle.kts" \) -path "*/app/*" -exec dirname {} \; | xargs dirname | head -n 1)
           fi
+
+          if [ -z "$PROJ_DIR" ]; then
+            echo "Error: Could not find Android project root inside ZIP"
+            ls -la extracted_src
+            exit 1
+          fi
+
+          echo "Using project directory: $PROJ_DIR"
+          cp -rn "$PROJ_DIR"/. .
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -31,10 +40,20 @@ jobs:
           java-version: '17'
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+        run: |
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+          else
+            gradle --version
+          fi
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: |
+          if [ -f "gradlew" ]; then
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
